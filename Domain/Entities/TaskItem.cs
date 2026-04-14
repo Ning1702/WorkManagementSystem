@@ -9,6 +9,7 @@ namespace WorkManagementSystem.Domain.Entities
         public string Description { get; set; }
         public Guid CreatedBy { get; set; }
         public DateTime CreatedAt { get; set; }
+        public DateTime? DueDate { get; set; }  // ✅ thêm deadline
         public TaskStatusEnum Status { get; set; } = TaskStatusEnum.NotStarted;
     }
 }

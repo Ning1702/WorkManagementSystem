@@ -19,16 +19,18 @@ namespace WorkManagementSystem.API.Middlewares
             }
             catch (Exception ex)
             {
-                // 🔥 LOG ERROR (QUAN TRỌNG NHẤT)
-                Log.Error(ex, "Unhandled exception occurred");
+                // ✅ Log lỗi bằng Serilog
+                Log.Error(ex, "Unhandled exception: {Message}", ex.Message);
 
                 context.Response.StatusCode = 500;
                 context.Response.ContentType = "application/json";
 
-                await context.Response.WriteAsync(new
+                // ✅ Trả về JSON đúng chuẩn
+                await context.Response.WriteAsJsonAsync(new
                 {
-                    message = "Internal Server Error"
-                }.ToString());
+                    statusCode = 500,
+                    message = ex.Message
+                });
             }
         }
     }

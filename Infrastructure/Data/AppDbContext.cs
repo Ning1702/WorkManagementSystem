@@ -15,5 +15,6 @@ namespace WorkManagementSystem.Infrastructure.Data
         public DbSet<Progress> Progresses { get; set; }
         public DbSet<UploadFile> UploadFiles { get; set; }
         public DbSet<ReportReview> Reviews { get; set; }
+        public DbSet<Notification> Notifications { get; set; }  // ✅ thêm
     }
 }

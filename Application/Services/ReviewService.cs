@@ -1,36 +1,54 @@
 ﻿using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
 using WorkManagementSystem.Domain.Entities;
-using WorkManagementSystem.Infrastructure.Data;
+using WorkManagementSystem.Infrastructure.Repositories;
 using TaskStatus = WorkManagementSystem.Domain.Enums.TaskStatus;
 
 namespace WorkManagementSystem.Application.Services
 {
     public class ReviewService : IReviewService
     {
-        private readonly AppDbContext _context;
+        private readonly IGenericRepository<Progress> _progressRepo;
+        private readonly IGenericRepository<ReportReview> _reviewRepo;
+        private readonly INotificationService _notificationService;  // ✅ thêm
 
-        public ReviewService(AppDbContext context)
+        public ReviewService(
+            IGenericRepository<Progress> progressRepo,
+            IGenericRepository<ReportReview> reviewRepo,
+            INotificationService notificationService)  // ✅ thêm
         {
-            _context = context;
+            _progressRepo = progressRepo;
+            _reviewRepo = reviewRepo;
+            _notificationService = notificationService;  // ✅ thêm
         }
 
-        public async Task<ReviewDto> Review(ReviewDto dto)  // Task → Task<ReviewDto>
+        public async Task<ReviewDto> Review(ReviewDto dto)
         {
-            var progress = await _context.Progresses.FindAsync(dto.ProgressId);
-            if (progress == null) throw new Exception("Progress not found");
+            var progress = await _progressRepo.GetByIdAsync(dto.ProgressId)
+                ?? throw new Exception("Progress not found");
+
             progress.Status = dto.Approve ? TaskStatus.Approved : TaskStatus.Rejected;
-            var review = new ReportReview
+            _progressRepo.Update(progress);
+
+            await _reviewRepo.AddAsync(new ReportReview
             {
                 Id = Guid.NewGuid(),
                 ProgressId = dto.ProgressId,
                 IsApproved = dto.Approve,
                 Comment = dto.Comment,
                 ReviewedAt = DateTime.UtcNow
-            };
-            _context.Reviews.Add(review);
-            await _context.SaveChangesAsync();
-            return dto;  // ✅ thêm dòng này
+            });
+
+            await _reviewRepo.SaveAsync();
+
+            // ✅ Gửi thông báo cho User
+            var message = dto.Approve
+                ? $"✅ Báo cáo của bạn đã được phê duyệt!{(string.IsNullOrEmpty(dto.Comment) ? "" : $" Ghi chú: {dto.Comment}")}"
+                : $"❌ Báo cáo của bạn bị từ chối!{(string.IsNullOrEmpty(dto.Comment) ? "" : $" Lý do: {dto.Comment}")}";
+
+            await _notificationService.AddNotification(progress.UserId, message);
+
+            return dto;
         }
     }
 }

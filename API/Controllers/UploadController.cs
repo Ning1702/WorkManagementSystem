@@ -1,8 +1,10 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using WorkManagementSystem.Application.Interfaces;
 
 namespace WorkManagementSystem.API.Controllers
 {
+    [Authorize]                    // ✅ thêm
     [Route("api/[controller]")]
     [ApiController]
     public class UploadController : ControllerBase

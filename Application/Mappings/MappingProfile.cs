@@ -1,10 +1,9 @@
 ﻿using AutoMapper;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Domain.Entities;
-// ❌ Bỏ dòng này - không cần
-// using static System.Runtime.InteropServices.JavaScript.JSType;
+using WorkManagementSystem.Domain.Enums;
 
-namespace WorkManagementSystem.Application.Mappings  // ✅ THÊM namespace này
+namespace WorkManagementSystem.Application.Mappings
 {
     public class MappingProfile : Profile
     {
@@ -12,6 +11,32 @@ namespace WorkManagementSystem.Application.Mappings  // ✅ THÊM namespace này
         {
             CreateMap<CreateTaskDto, TaskItem>();
             CreateMap<CreateProgressDto, Progress>();
+
+            CreateMap<TaskItem, TaskDto>()
+                .ForMember(dest => dest.Status,
+                    opt => opt.MapFrom(src => src.Status.ToString()));
+
+            CreateMap<Progress, ProgressDto>()
+                .ForMember(dest => dest.Status,
+                    opt => opt.MapFrom(src => src.Status.ToString()));
+
+            CreateMap<Unit, UnitDto>();
+
+            // ✅ Map đầy đủ các field mới
+            CreateMap<User, UserDto>()
+                .ForMember(dest => dest.UnitId,
+                    opt => opt.MapFrom(src => src.UnitId))
+                .ForMember(dest => dest.FullName,
+                    opt => opt.MapFrom(src => src.FullName))
+                .ForMember(dest => dest.EmployeeCode,
+                    opt => opt.MapFrom(src => src.EmployeeCode))
+                .ForMember(dest => dest.IsApproved,
+                    opt => opt.MapFrom(src => src.IsApproved));
+
+            CreateMap<ReportReview, ReviewDto>()
+                .ForMember(dest => dest.ProgressId, opt => opt.MapFrom(src => src.ProgressId))
+                .ForMember(dest => dest.Approve, opt => opt.MapFrom(src => src.IsApproved))
+                .ForMember(dest => dest.Comment, opt => opt.MapFrom(src => src.Comment));
         }
     }
 }

@@ -21,7 +21,6 @@ Log.Logger = new LoggerConfiguration()
 
 var builder = WebApplication.CreateBuilder(args);
 
-// dùng Serilog
 builder.Host.UseSerilog();
 
 // ================= SERVICES =================
@@ -43,9 +42,24 @@ builder.Services.AddScoped<IReviewService, ReviewService>();
 builder.Services.AddScoped<IUnitService, UnitService>();
 builder.Services.AddScoped<IUserService, UserService>();
 builder.Services.AddScoped<IUploadService, UploadService>();
-
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IDashboardService, DashboardService>();
+builder.Services.AddScoped<IExportService, ExportService>();
+builder.Services.AddScoped<IChangePasswordService, ChangePasswordService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
+
+// ================= CORS =================  ? THÊM
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
 // ================= AUTH (JWT) =================
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -57,7 +71,6 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateAudience = false,
             ValidateLifetime = true,
             ValidateIssuerSigningKey = true,
-
             IssuerSigningKey = new SymmetricSecurityKey(
                 Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
         };
@@ -100,10 +113,8 @@ builder.Services.AddSwaggerGen(c =>
         }
     });
 
-    // XML comment
     var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
     var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-
     if (File.Exists(xmlPath))
     {
         c.IncludeXmlComments(xmlPath);
@@ -114,35 +125,29 @@ builder.Services.AddSwaggerGen(c =>
 var app = builder.Build();
 
 // ================= MIDDLEWARE =================
-
-// ?? QUAN TR?NG NH?T CHO UPLOAD
 var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "Uploads");
-
 if (!Directory.Exists(uploadsPath))
 {
     Directory.CreateDirectory(uploadsPath);
 }
 
-app.UseStaticFiles(); // ch? 1 l?n
-
+app.UseStaticFiles();
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(uploadsPath),
     RequestPath = "/Uploads"
 });
 
-// global exception
+app.UseCors();                          // ? THÊM - ph?i tr??c UseAuthentication
+
 app.UseMiddleware<ExceptionMiddleware>();
 
-// swagger
 app.UseSwagger();
 app.UseSwaggerUI();
 
-// auth
 app.UseAuthentication();
 app.UseAuthorization();
 
-// routes
 app.MapControllers();
 
 app.Run();

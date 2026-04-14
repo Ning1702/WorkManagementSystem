@@ -3,9 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
 using WorkManagementSystem.Domain.Entities;
-using WorkManagementSystem.Infrastructure.Data;
-
-// alias tránh trùng
+using WorkManagementSystem.Infrastructure.Repositories;
 using TaskStatusEnum = WorkManagementSystem.Domain.Enums.TaskStatus;
 using TaskItem = WorkManagementSystem.Domain.Entities.TaskItem;
 
@@ -13,122 +11,128 @@ namespace WorkManagementSystem.Application.Services
 {
     public class TaskService : ITaskService
     {
-        private readonly AppDbContext _context;
+        private readonly IGenericRepository<TaskItem> _taskRepo;
+        private readonly IGenericRepository<TaskAssignee> _assigneeRepo;
+        private readonly IGenericRepository<UserUnit> _userUnitRepo;
+        private readonly IGenericRepository<User> _userRepo;
         private readonly IMapper _mapper;
 
-        public TaskService(AppDbContext context, IMapper mapper)
+        public TaskService(
+            IGenericRepository<TaskItem> taskRepo,
+            IGenericRepository<TaskAssignee> assigneeRepo,
+            IGenericRepository<UserUnit> userUnitRepo,
+            IGenericRepository<User> userRepo,
+            IMapper mapper)
         {
-            _context = context;
+            _taskRepo = taskRepo;
+            _assigneeRepo = assigneeRepo;
+            _userUnitRepo = userUnitRepo;
+            _userRepo = userRepo;
             _mapper = mapper;
         }
 
-        // ================= CREATE =================
+        public async Task<Guid?> GetManagerUnitId(Guid managerId)
+        {
+            var manager = await _userRepo.GetByIdAsync(managerId);
+            return manager?.UnitId;
+        }
+
         public async Task<TaskDto> Create(CreateTaskDto dto, Guid userId)
         {
             var task = _mapper.Map<TaskItem>(dto);
-
             task.Id = Guid.NewGuid();
             task.CreatedBy = userId;
             task.CreatedAt = DateTime.UtcNow;
+            task.DueDate = dto.DueDate;  // ✅ lưu deadline
+            await _taskRepo.AddAsync(task);
 
-            _context.Tasks.Add(task);
-
-            // assign user
             if (dto.UserIds != null)
-            {
                 foreach (var uid in dto.UserIds)
-                {
-                    _context.TaskAssignees.Add(new TaskAssignee
-                    {
-                        Id = Guid.NewGuid(),
-                        TaskId = task.Id,
-                        UserId = uid
-                    });
-                }
-            }
+                    await _assigneeRepo.AddAsync(new TaskAssignee
+                    { Id = Guid.NewGuid(), TaskId = task.Id, UserId = uid });
 
-            // assign unit
             if (dto.UnitIds != null)
-            {
                 foreach (var unitId in dto.UnitIds)
-                {
-                    _context.TaskAssignees.Add(new TaskAssignee
-                    {
-                        Id = Guid.NewGuid(),
-                        TaskId = task.Id,
-                        UnitId = unitId
-                    });
-                }
-            }
+                    await _assigneeRepo.AddAsync(new TaskAssignee
+                    { Id = Guid.NewGuid(), TaskId = task.Id, UnitId = unitId });
 
-            await _context.SaveChangesAsync();
-
+            await _taskRepo.SaveAsync();
             return _mapper.Map<TaskDto>(task);
         }
 
-        // ================= GET (SEARCH + FILTER + PAGING) =================
-        public async Task<object> Get(string keyword, int page, int size, string? status)
+        public async Task<object> Get(
+            string keyword, int page, int size,
+            string? status,
+            Guid? userId = null,
+            Guid? unitId = null)
         {
-            // fix paging
             page = page <= 0 ? 1 : page;
             size = size <= 0 ? 10 : size;
 
-            var query = _context.Tasks.AsQueryable();
+            var query = _taskRepo.Query();
 
-            // search
             if (!string.IsNullOrEmpty(keyword))
-            {
                 query = query.Where(x => x.Title.Contains(keyword));
-            }
 
-            // filter status
             if (!string.IsNullOrEmpty(status) &&
                 Enum.TryParse<TaskStatusEnum>(status, true, out var statusEnum))
-            {
                 query = query.Where(x => x.Status == statusEnum);
+
+            if (userId.HasValue)
+            {
+                var assignedTaskIds = _assigneeRepo.Query()
+                    .Where(a => a.UserId == userId.Value)
+                    .Select(a => a.TaskId);
+                query = query.Where(x => assignedTaskIds.Contains(x.Id));
+            }
+
+            if (unitId.HasValue)
+            {
+                var unitTaskIds = _assigneeRepo.Query()
+                    .Where(a => a.UnitId == unitId.Value)
+                    .Select(a => a.TaskId);
+
+                var userIdsInUnit = _userUnitRepo.Query()
+                    .Where(uu => uu.UnitId == unitId.Value)
+                    .Select(uu => uu.UserId);
+
+                var userTaskIds = _assigneeRepo.Query()
+                    .Where(a => a.UserId.HasValue && userIdsInUnit.Contains(a.UserId.Value))
+                    .Select(a => a.TaskId);
+
+                query = query.Where(x =>
+                    unitTaskIds.Contains(x.Id) ||
+                    userTaskIds.Contains(x.Id));
             }
 
             var total = await query.CountAsync();
-
             var data = await query
-                .OrderByDescending(x => x.CreatedAt) // QUAN TRỌNG
+                .OrderByDescending(x => x.CreatedAt)
                 .Skip((page - 1) * size)
                 .Take(size)
                 .ToListAsync();
 
-            var result = _mapper.Map<List<TaskDto>>(data);
-
-            return new
-            {
-                total,
-                page,
-                size,
-                data = result
-            };
+            return new { total, page, size, data = _mapper.Map<List<TaskDto>>(data) };
         }
 
-        // ================= UPDATE =================
         public async Task<TaskDto> Update(Guid id, CreateTaskDto dto)
         {
-            var task = await _context.Tasks.FindAsync(id)
+            var task = await _taskRepo.GetByIdAsync(id)
                 ?? throw new Exception("Task not found");
-
             task.Title = dto.Title;
             task.Description = dto.Description;
-
-            await _context.SaveChangesAsync();
-
+            task.DueDate = dto.DueDate;  // ✅ cập nhật deadline
+            _taskRepo.Update(task);
+            await _taskRepo.SaveAsync();
             return _mapper.Map<TaskDto>(task);
         }
 
-        // ================= DELETE =================
         public async Task Delete(Guid id)
         {
-            var task = await _context.Tasks.FindAsync(id)
+            var task = await _taskRepo.GetByIdAsync(id)
                 ?? throw new Exception("Task not found");
-
-            _context.Tasks.Remove(task);
-            await _context.SaveChangesAsync();
+            _taskRepo.Delete(task);
+            await _taskRepo.SaveAsync();
         }
     }
 }

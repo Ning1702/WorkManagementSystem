@@ -22,38 +22,108 @@ namespace WorkManagementSystem.Application.Services
             _config = config;
         }
 
-        // ================= REGISTER =================
         public async Task<string> Register(AuthDto dto)
         {
+            var exists = await _context.Users
+                .AnyAsync(x => x.Username == dto.Username);
+            if (exists)
+                throw new Exception("Tên đăng nhập đã tồn tại!");
+
+            var count = await _context.Users.CountAsync();
+            var employeeCode = $"EMP{(count + 1):D3}";
+
             var user = new User
             {
                 Id = Guid.NewGuid(),
                 Username = dto.Username,
+                FullName = dto.FullName,
+                EmployeeCode = employeeCode,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-
-                // nếu không truyền → mặc định User
-                Role = string.IsNullOrEmpty(dto.Role) ? "User" : dto.Role
+                Role = "User",
+                UnitId = dto.UnitId,
+                IsApproved = false  // ✅ chờ Admin duyệt
             };
 
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-
-            return "Đăng ký thành công";
+            return "Đăng ký thành công! Vui lòng chờ Admin phê duyệt.";
         }
 
-        // ================= LOGIN =================
         public async Task<string> Login(string username, string password)
         {
             var user = await _context.Users
                 .FirstOrDefaultAsync(x => x.Username == username)
-                ?? throw new Exception("User not found");
+                ?? throw new Exception("Tài khoản không tồn tại!");
 
             if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
-                throw new Exception("Wrong password");
+                throw new Exception("Mật khẩu không đúng!");
 
+            if (!user.IsApproved)
+                throw new Exception("Tài khoản chưa được Admin phê duyệt!");
+
+            return GenerateToken(user);
+        }
+
+        public async Task<string> ResetPassword(ResetPasswordDto dto)
+        {
+            var user = await _context.Users
+                .FirstOrDefaultAsync(x => x.Username == dto.Username)
+                ?? throw new Exception("Không tìm thấy tài khoản!");
+
+            user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.NewPassword);
+            await _context.SaveChangesAsync();
+            return "Đổi mật khẩu thành công!";
+        }
+
+        public async Task<string> ApproveUser(Guid userId)
+        {
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new Exception("Không tìm thấy tài khoản!");
+            user.IsApproved = true;
+            await _context.SaveChangesAsync();
+            return $"Đã duyệt tài khoản {user.FullName}!";
+        }
+
+        public async Task<string> RejectUser(Guid userId)
+        {
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new Exception("Không tìm thấy tài khoản!");
+            _context.Users.Remove(user);
+            await _context.SaveChangesAsync();
+            return $"Đã xóa tài khoản {user.FullName}!";
+        }
+
+        public async Task<List<UserDto>> GetPendingUsers()
+        {
+            return await _context.Users
+                .Where(x => x.IsApproved == false)  // ✅ lọc đúng theo IsApproved
+                .Select(x => new UserDto
+                {
+                    Id = x.Id,
+                    Username = x.Username ?? "",
+                    FullName = x.FullName ?? "",
+                    EmployeeCode = x.EmployeeCode ?? "",
+                    Role = x.Role ?? "",
+                    UnitId = x.UnitId,
+                    IsApproved = x.IsApproved
+                })
+                .ToListAsync();
+        }
+
+        public async Task<string> RefreshToken(Guid userId)
+        {
+            var user = await _context.Users.FindAsync(userId)
+                ?? throw new Exception("Không tìm thấy tài khoản!");
+            return GenerateToken(user);
+        }
+
+        private string GenerateToken(User user)
+        {
             var claims = new[]
             {
                 new Claim("id", user.Id.ToString()),
+                new Claim("employeeCode", user.EmployeeCode ?? ""),
+                new Claim("fullName", user.FullName ?? ""),
                 new Claim(ClaimTypes.Name, user.Username),
                 new Claim(ClaimTypes.Role, user.Role)
             };

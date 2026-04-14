@@ -1,4 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
 
@@ -16,7 +17,7 @@ namespace WorkManagementSystem.API.Controllers
         }
 
         /// <summary>
-        /// Đăng ký tài khoản
+        /// Đăng ký tài khoản (chờ Admin duyệt)
         /// </summary>
         [HttpPost("register")]
         public async Task<IActionResult> Register(AuthDto dto)
@@ -28,5 +29,36 @@ namespace WorkManagementSystem.API.Controllers
         [HttpPost("login")]
         public async Task<IActionResult> Login(LoginDto dto)
             => Ok(await _service.Login(dto.Username, dto.Password));
+
+        /// <summary>
+        /// Đặt lại mật khẩu
+        /// </summary>
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
+            => Ok(await _service.ResetPassword(dto));
+
+        /// <summary>
+        /// Lấy danh sách tài khoản chờ duyệt (Admin)
+        /// </summary>
+        [HttpGet("pending")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> GetPendingUsers()
+            => Ok(await _service.GetPendingUsers());
+
+        /// <summary>
+        /// Duyệt tài khoản (Admin)
+        /// </summary>
+        [HttpPost("approve/{userId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> ApproveUser(Guid userId)
+            => Ok(await _service.ApproveUser(userId));
+
+        /// <summary>
+        /// Từ chối tài khoản (Admin)
+        /// </summary>
+        [HttpDelete("reject/{userId}")]
+        [Authorize(Roles = "Admin")]
+        public async Task<IActionResult> RejectUser(Guid userId)
+            => Ok(await _service.RejectUser(userId));
     }
 }
