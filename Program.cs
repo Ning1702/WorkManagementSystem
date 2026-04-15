@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authentication.JwtBearer;
+﻿using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -14,7 +14,6 @@ using WorkManagementSystem.Infrastructure.Data;
 using WorkManagementSystem.Infrastructure.Repositories;
 using WorkManagementSystem.Domain.Entities;
 
-
 // ================= SERILOG =================
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()
@@ -22,6 +21,10 @@ Log.Logger = new LoggerConfiguration()
     .CreateLogger();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// ================= RENDER PORT =================
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
 
 builder.Host.UseSerilog();
 
@@ -36,7 +39,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 // Repository
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 builder.Services.AddScoped<IGenericRepository<TaskHistory>, GenericRepository<TaskHistory>>();
-
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -55,14 +57,20 @@ builder.Services.AddScoped<IProfileService, ProfileService>();
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 
-// ================= CORS =================  ? TH�M
+// ================= CORS =================
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        policy.WithOrigins(
+                "http://localhost:5173",
+                "http://localhost:3000"
+            // thêm frontend deploy sau này vào đây, ví dụ:
+            // "https://your-frontend.onrender.com"
+            )
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -90,7 +98,7 @@ builder.Services.AddSwaggerGen(c =>
     {
         Title = "WorkManagement API",
         Version = "v1",
-        Description = "API qu?n l� c�ng vi?c v� ti?n ??"
+        Description = "API quản lý công việc và tiến độ"
     });
 
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
@@ -100,7 +108,7 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Nh?p token d?ng: Bearer {token}"
+        Description = "Nhập token dạng: Bearer {token}"
     });
 
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -114,7 +122,7 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            new string[] {}
+            Array.Empty<string>()
         }
     });
 
@@ -143,7 +151,7 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/Uploads"
 });
 
-app.UseCors();                          // ? TH�M - ph?i tr??c UseAuthentication
+app.UseCors();
 
 app.UseMiddleware<ExceptionMiddleware>();
 
@@ -152,6 +160,14 @@ app.UseSwaggerUI();
 
 app.UseAuthentication();
 app.UseAuthorization();
+
+// ================= ROOT ENDPOINT =================
+app.MapGet("/", () => Results.Json(new
+{
+    message = "WorkManagement backend is running",
+    swagger = "/swagger",
+    time = DateTime.UtcNow
+}));
 
 app.MapControllers();
 
