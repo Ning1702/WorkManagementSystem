@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Http;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
 using WorkManagementSystem.Domain.Entities;
@@ -17,7 +17,7 @@ namespace WorkManagementSystem.Application.Services
             _context = context;
         }
 
-        public async Task<UploadFileDto> UploadAsync(IFormFile file, Guid? progressId)  // ✅ đổi return type
+        public async Task<UploadFileDto> UploadAsync(IFormFile file, Guid? progressId)
         {
             if (file == null || file.Length == 0)
                 throw new Exception("File is empty");
@@ -46,7 +46,21 @@ namespace WorkManagementSystem.Application.Services
             _context.UploadFiles.Add(upload);
             await _context.SaveChangesAsync();
 
-            // ✅ Trả về DTO thay vì entity
+            return new UploadFileDto
+            {
+                Id = upload.Id,
+                FileName = upload.FileName,
+                FilePath = upload.FilePath,
+                CreatedAt = upload.CreatedAt,
+                ProgressId = upload.ProgressId
+            };
+        }
+
+        public async Task<UploadFileDto?> GetFileByIdAsync(Guid id)
+        {
+            var upload = await _context.UploadFiles.FindAsync(id);
+            if (upload == null) return null;
+
             return new UploadFileDto
             {
                 Id = upload.Id,

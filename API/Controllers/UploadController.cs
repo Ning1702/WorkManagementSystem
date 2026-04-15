@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WorkManagementSystem.Application.Interfaces;
 
@@ -24,6 +24,19 @@ namespace WorkManagementSystem.API.Controllers
         {
             var result = await _uploadService.UploadAsync(file, progressId);
             return Ok(result);
+        }
+
+        /// <summary>
+        /// Tải file đính kèm
+        /// </summary>
+        [HttpGet("{id}")]
+        public async Task<IActionResult> Download(Guid id)
+        {
+            var file = await _uploadService.GetFileByIdAsync(id);
+            if (file == null) return NotFound("File not found");
+
+            var fileBytes = await System.IO.File.ReadAllBytesAsync(file.FilePath);
+            return File(fileBytes, "application/octet-stream", file.FileName);
         }
     }
 }

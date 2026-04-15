@@ -12,6 +12,8 @@ using WorkManagementSystem.Application.Mappings;
 using WorkManagementSystem.Application.Services;
 using WorkManagementSystem.Infrastructure.Data;
 using WorkManagementSystem.Infrastructure.Repositories;
+using WorkManagementSystem.Domain.Entities;
+
 
 // ================= SERILOG =================
 Log.Logger = new LoggerConfiguration()
@@ -33,6 +35,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 // Repository
 builder.Services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+builder.Services.AddScoped<IGenericRepository<TaskHistory>, GenericRepository<TaskHistory>>();
+
 
 // Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -47,6 +51,7 @@ builder.Services.AddScoped<IDashboardService, DashboardService>();
 builder.Services.AddScoped<IExportService, ExportService>();
 builder.Services.AddScoped<IChangePasswordService, ChangePasswordService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
+
 // AutoMapper
 builder.Services.AddAutoMapper(typeof(MappingProfile));
 

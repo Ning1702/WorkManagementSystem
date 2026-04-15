@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -80,6 +80,23 @@ namespace WorkManagementSystem.Application.Services
             var user = await _context.Users.FindAsync(userId)
                 ?? throw new Exception("Không tìm thấy tài khoản!");
             user.IsApproved = true;
+
+            // Đồng bộ vào bảng UserUnit nếu nhân viên đã chọn phòng lúc đăng ký
+            if (user.UnitId.HasValue)
+            {
+                var alreadyMapped = await _context.Set<UserUnit>()
+                    .AnyAsync(uu => uu.UserId == userId && uu.UnitId == user.UnitId.Value);
+                if (!alreadyMapped)
+                {
+                    _context.Set<UserUnit>().Add(new UserUnit
+                    {
+                        Id = Guid.NewGuid(),
+                        UserId = userId,
+                        UnitId = user.UnitId.Value
+                    });
+                }
+            }
+
             await _context.SaveChangesAsync();
             return $"Đã duyệt tài khoản {user.FullName}!";
         }

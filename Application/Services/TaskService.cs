@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
@@ -15,6 +15,8 @@ namespace WorkManagementSystem.Application.Services
         private readonly IGenericRepository<TaskAssignee> _assigneeRepo;
         private readonly IGenericRepository<UserUnit> _userUnitRepo;
         private readonly IGenericRepository<User> _userRepo;
+        private readonly IGenericRepository<TaskHistory> _historyRepo;  // ✅ MỚI
+        private readonly INotificationService _notificationService; // ✅ MỚI
         private readonly IMapper _mapper;
 
         public TaskService(
@@ -22,12 +24,16 @@ namespace WorkManagementSystem.Application.Services
             IGenericRepository<TaskAssignee> assigneeRepo,
             IGenericRepository<UserUnit> userUnitRepo,
             IGenericRepository<User> userRepo,
+            IGenericRepository<TaskHistory> historyRepo,  // ✅ MỚI
+            INotificationService notificationService, // ✅ MỚI
             IMapper mapper)
         {
             _taskRepo = taskRepo;
             _assigneeRepo = assigneeRepo;
             _userUnitRepo = userUnitRepo;
             _userRepo = userRepo;
+            _historyRepo = historyRepo;  // ✅ MỚI
+            _notificationService = notificationService; // ✅ MỚI
             _mapper = mapper;
         }
 
@@ -43,7 +49,7 @@ namespace WorkManagementSystem.Application.Services
             task.Id = Guid.NewGuid();
             task.CreatedBy = userId;
             task.CreatedAt = DateTime.UtcNow;
-            task.DueDate = dto.DueDate;  // ✅ lưu deadline
+            task.DueDate = dto.DueDate;
             await _taskRepo.AddAsync(task);
 
             if (dto.UserIds != null)
@@ -112,27 +118,122 @@ namespace WorkManagementSystem.Application.Services
                 .Take(size)
                 .ToListAsync();
 
-            return new { total, page, size, data = _mapper.Map<List<TaskDto>>(data) };
+            var taskIds = data.Select(x => x.Id).ToList();
+            var assignees = await _assigneeRepo.Query()
+                .Where(a => taskIds.Contains(a.TaskId) && a.UserId.HasValue)
+                .Join(_userRepo.Query(),
+                    a => a.UserId,
+                    u => u.Id,
+                    (a, u) => new { a.TaskId, u.Id, u.FullName, u.EmployeeCode })
+                .ToListAsync();
+
+            var taskDtos = _mapper.Map<List<TaskDto>>(data);
+            foreach (var dto in taskDtos)
+            {
+                dto.Assignees = assignees
+                    .Where(a => a.TaskId == dto.Id)
+                    .Select(a => new TaskAssigneeDto 
+                    { 
+                        Id = (Guid)a.Id, 
+                        FullName = a.FullName ?? "—", 
+                        EmployeeCode = a.EmployeeCode ?? "—" 
+                    })
+                    .ToList();
+            }
+
+            return new { total, page, size, data = taskDtos };
         }
 
-        public async Task<TaskDto> Update(Guid id, CreateTaskDto dto)
+        // ✅ SỬA: Thêm Audit Log khi cập nhật Task
+        public async Task<TaskDto> Update(Guid id, CreateTaskDto dto, Guid changedBy)
         {
             var task = await _taskRepo.GetByIdAsync(id)
                 ?? throw new Exception("Task not found");
+
+            // ✅ MỚI: Ghi lại lịch sử thay đổi
+            if (task.Title != dto.Title)
+                await _historyRepo.AddAsync(new TaskHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = id,
+                    ChangedBy = changedBy,
+                    FieldName = "Title",
+                    OldValue = task.Title,
+                    NewValue = dto.Title
+                });
+
+            if (task.DueDate != dto.DueDate)
+                await _historyRepo.AddAsync(new TaskHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = id,
+                    ChangedBy = changedBy,
+                    FieldName = "DueDate",
+                    OldValue = task.DueDate?.ToString("dd/MM/yyyy") ?? "Không có",
+                    NewValue = dto.DueDate?.ToString("dd/MM/yyyy") ?? "Không có"
+                });
+
+            if (task.Description != dto.Description)
+                await _historyRepo.AddAsync(new TaskHistory
+                {
+                    Id = Guid.NewGuid(),
+                    TaskId = id,
+                    ChangedBy = changedBy,
+                    FieldName = "Description",
+                    OldValue = task.Description,
+                    NewValue = dto.Description
+                });
+
             task.Title = dto.Title;
             task.Description = dto.Description;
-            task.DueDate = dto.DueDate;  // ✅ cập nhật deadline
+            task.DueDate = dto.DueDate;
             _taskRepo.Update(task);
             await _taskRepo.SaveAsync();
             return _mapper.Map<TaskDto>(task);
         }
 
+        // ✅ SỬA: Soft delete thay vì xóa cứng
         public async Task Delete(Guid id)
         {
             var task = await _taskRepo.GetByIdAsync(id)
                 ?? throw new Exception("Task not found");
-            _taskRepo.Delete(task);
+
+            task.IsDeleted = true;  // ✅ Soft delete
+            _taskRepo.Update(task);
             await _taskRepo.SaveAsync();
+        }
+
+        public async Task RemindTask(Guid taskId, Guid reminderId)
+        {
+            var task = await _taskRepo.GetByIdAsync(taskId)
+                ?? throw new Exception("Task not found");
+
+            var assignedUserIds = await _assigneeRepo.Query()
+                .Where(a => a.TaskId == taskId && a.UserId.HasValue)
+                .Select(a => a.UserId.Value)
+                .ToListAsync();
+
+            if (!assignedUserIds.Any())
+                throw new Exception("Không có nhân viên nào được giao công việc này.");
+
+            var reminderUser = await _userRepo.GetByIdAsync(reminderId);
+            var reminderName = reminderUser?.FullName ?? "Quản lý";
+
+            foreach (var userId in assignedUserIds)
+            {
+                await _notificationService.AddNotification(userId, $"Quản lý {reminderName} đã đôn đốc bạn về công việc: {task.Title}. Hãy khẩn trương hoàn thành!");
+            }
+
+            await _historyRepo.AddAsync(new TaskHistory
+            {
+                Id = Guid.NewGuid(),
+                TaskId = taskId,
+                ChangedBy = reminderId,
+                FieldName = "Remind",
+                OldValue = "N/A",
+                NewValue = "Đã gửi nhắc nhở đôn đốc tiến độ"
+            });
+            await _historyRepo.SaveAsync();
         }
     }
 }

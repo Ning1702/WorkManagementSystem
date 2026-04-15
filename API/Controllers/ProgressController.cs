@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
+using WorkManagementSystem.Domain.Entities;
+using WorkManagementSystem.Infrastructure.Repositories;
 
 namespace WorkManagementSystem.API.Controllers
 {
@@ -11,10 +13,14 @@ namespace WorkManagementSystem.API.Controllers
     public class ProgressController : ControllerBase
     {
         private readonly IProgressService _service;
+        private readonly IGenericRepository<User> _userRepo;  // ✅ MỚI
 
-        public ProgressController(IProgressService service)
+        public ProgressController(
+            IProgressService service,
+            IGenericRepository<User> userRepo)  // ✅ MỚI
         {
             _service = service;
+            _userRepo = userRepo;  // ✅ MỚI
         }
 
         /// <summary>
@@ -24,16 +30,24 @@ namespace WorkManagementSystem.API.Controllers
         public async Task<IActionResult> GetAll(
             int page = 1,
             int size = 10,
-            bool myProgress = false) // ✅ thêm myProgress
+            bool myProgress = false)
         {
+            var role = User.FindFirst(System.Security.Claims.ClaimTypes.Role)?.Value;
+            var idClaim = User.FindFirst("id")?.Value;
             Guid? userId = null;
-            if (myProgress)
+            Guid? unitId = null;
+
+            if (myProgress && Guid.TryParse(idClaim, out var parsedId))
+                userId = parsedId;
+
+            // ✅ MỚI: Manager chỉ xem progress của phòng mình
+            if (role == "Manager" && !myProgress && Guid.TryParse(idClaim, out var mid))
             {
-                var idClaim = User.FindFirst("id")?.Value;
-                if (Guid.TryParse(idClaim, out var parsedId))
-                    userId = parsedId;
+                var manager = await _userRepo.GetByIdAsync(mid);
+                unitId = manager?.UnitId;
             }
-            return Ok(await _service.GetAll(page, size, userId));
+
+            return Ok(await _service.GetAll(page, size, userId, unitId));
         }
 
         /// <summary>

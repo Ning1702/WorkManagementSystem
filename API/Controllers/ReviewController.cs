@@ -5,7 +5,7 @@ using WorkManagementSystem.Application.Interfaces;
 
 namespace WorkManagementSystem.API.Controllers
 {
-    [Authorize(Roles = "Admin,Manager")]  // ✅ thêm Admin
+    [Authorize(Roles = "Admin,Manager")]
     [ApiController]
     [Route("api/review")]
     public class ReviewController : ControllerBase
@@ -22,6 +22,9 @@ namespace WorkManagementSystem.API.Controllers
         /// </summary>
         [HttpPost]
         public async Task<IActionResult> Review(ReviewDto dto)
-            => Ok(await _service.Review(dto));
+        {
+            var reviewerId = Guid.Parse(User.FindFirst("id")!.Value);  // ✅ MỚI
+            return Ok(await _service.Review(dto, reviewerId));           // ✅ SỬA
+        }
     }
 }

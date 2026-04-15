@@ -15,6 +15,15 @@ namespace WorkManagementSystem.Infrastructure.Data
         public DbSet<Progress> Progresses { get; set; }
         public DbSet<UploadFile> UploadFiles { get; set; }
         public DbSet<ReportReview> Reviews { get; set; }
-        public DbSet<Notification> Notifications { get; set; }  // ✅ thêm
+        public DbSet<Notification> Notifications { get; set; }
+        public DbSet<TaskHistory> TaskHistories { get; set; }  // ✅ MỚI: Audit log
+
+        // ✅ MỚI: Global Query Filter — tự động lọc bản ghi đã xóa mềm
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.Entity<User>().HasQueryFilter(u => !u.IsDeleted);
+            modelBuilder.Entity<TaskItem>().HasQueryFilter(t => !t.IsDeleted);
+            modelBuilder.Entity<Unit>().HasQueryFilter(u => !u.IsDeleted);
+        }
     }
 }

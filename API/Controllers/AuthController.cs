@@ -31,9 +31,10 @@ namespace WorkManagementSystem.API.Controllers
             => Ok(await _service.Login(dto.Username, dto.Password));
 
         /// <summary>
-        /// Đặt lại mật khẩu
+        /// Đặt lại mật khẩu — CHỈ ADMIN mới được phép
         /// </summary>
         [HttpPost("reset-password")]
+        [Authorize(Roles = "Admin")]  // ✅ SỬA: Thêm bảo mật — chỉ Admin reset được
         public async Task<IActionResult> ResetPassword(ResetPasswordDto dto)
             => Ok(await _service.ResetPassword(dto));
 

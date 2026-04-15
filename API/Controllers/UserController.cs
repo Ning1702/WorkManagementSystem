@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using WorkManagementSystem.Application.DTOs;
@@ -54,6 +54,22 @@ namespace WorkManagementSystem.API.Controllers
         {
             await _service.Delete(id);
             return Ok();
+        }
+
+        /// <summary>Xem điểm KPI cá nhân (nhân viên xem của mình, Manager/Admin xem bất kỳ)</summary>
+        [HttpGet("performance/{id}")]
+        public async Task<IActionResult> GetPerformance(Guid id)
+            => Ok(await _service.GetPerformanceAsync(id));
+
+        /// <summary>Xem bảng KPI toàn phòng (Manager xem nhân viên phòng mình)</summary>
+        [HttpGet("performance/unit")]
+        [Authorize(Roles = "Manager,Admin")]
+        public async Task<IActionResult> GetUnitPerformance()
+        {
+            var idClaim = User.FindFirst("id")?.Value;
+            if (!Guid.TryParse(idClaim, out var managerId))
+                return Unauthorized();
+            return Ok(await _service.GetUnitPerformanceAsync(managerId));
         }
     }
 }

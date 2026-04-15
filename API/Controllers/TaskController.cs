@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
@@ -29,7 +29,6 @@ namespace WorkManagementSystem.API.Controllers
             if (myTasks && Guid.TryParse(idClaim, out var parsedId))
                 userId = parsedId;
 
-            // ✅ Manager chỉ thấy task của phòng mình
             Guid? managerUnitId = null;
             if (role == "Manager" && Guid.TryParse(idClaim, out var mid))
                 managerUnitId = await _service.GetManagerUnitId(mid);
@@ -48,11 +47,14 @@ namespace WorkManagementSystem.API.Controllers
             return Ok(result);
         }
 
-        /// <summary>Cập nhật task (Manager)</summary>
+        /// <summary>Cập nhật task (Manager) — có ghi lịch sử thay đổi</summary>
         [HttpPut("{id}")]
         [Authorize(Roles = "Manager")]
         public async Task<IActionResult> Update(Guid id, CreateTaskDto dto)
-            => Ok(await _service.Update(id, dto));
+        {
+            var changedBy = Guid.Parse(User.FindFirst("id")!.Value);  // ✅ MỚI
+            return Ok(await _service.Update(id, dto, changedBy));       // ✅ SỬA
+        }
 
         /// <summary>Xóa task (Manager)</summary>
         [HttpDelete("{id}")]
@@ -61,6 +63,16 @@ namespace WorkManagementSystem.API.Controllers
         {
             await _service.Delete(id);
             return Ok(new { message = "Deleted successfully" });
+        }
+
+        /// <summary>Đôn đốc deadline (Manager)</summary>
+        [HttpPost("{id}/remind")]
+        [Authorize(Roles = "Manager")]
+        public async Task<IActionResult> Remind(Guid id)
+        {
+            var managerId = Guid.Parse(User.FindFirst("id")!.Value);
+            await _service.RemindTask(id, managerId);
+            return Ok(new { message = "Đã gửi nhắc nhở đôn đốc thành công!" });
         }
     }
 }

@@ -10,8 +10,9 @@
         public string Role { get; set; }
         public Guid? UnitId { get; set; }
         public bool IsApproved { get; set; } = false;
-        public string? Email { get; set; }        // ✅ thêm
-        public string? PhoneNumber { get; set; }  // ✅ thêm
+        public string? Email { get; set; }
+        public string? PhoneNumber { get; set; }
+        public bool IsDeleted { get; set; } = false;  // ✅ MỚI: Soft delete
         public ICollection<UserUnit> UserUnits { get; set; } = new List<UserUnit>();
     }
 }

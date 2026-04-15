@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using WorkManagementSystem.Application.DTOs;
 using WorkManagementSystem.Application.Interfaces;
@@ -29,10 +29,8 @@ namespace WorkManagementSystem.Application.Services
         public async Task<List<UnitDto>> GetAll()
             => _mapper.Map<List<UnitDto>>(await _repo.Query().ToListAsync());
 
-        // ✅ Lấy unit của user đang đăng nhập
         public async Task<UnitDto?> GetMyUnit(Guid userId)
         {
-            // Tìm qua UserUnit
             var userUnit = await _userUnitRepo.Query()
                 .Include(x => x.Unit)
                 .FirstOrDefaultAsync(x => x.UserId == userId);
@@ -40,7 +38,6 @@ namespace WorkManagementSystem.Application.Services
             if (userUnit != null)
                 return _mapper.Map<UnitDto>(userUnit.Unit);
 
-            // Hoặc tìm qua User.UnitId (cho Manager)
             var user = await _userRepo.GetByIdAsync(userId);
             if (user?.UnitId != null)
             {
@@ -53,16 +50,29 @@ namespace WorkManagementSystem.Application.Services
 
         public async Task<List<UserDto>> GetUsers(Guid unitId)
         {
-            var users = await _userUnitRepo.Query()
+            // Lấy ID từ bảng liên kết
+            var userIdsFromMapping = await _userUnitRepo.Query()
                 .Where(x => x.UnitId == unitId)
-                .Include(x => x.User)
-                .Select(x => new UserDto
+                .Select(x => x.UserId)
+                .ToListAsync();
+
+            // Lấy user từ cả 2 nguồn: UnitId trực tiếp HOẶC nằm trong danh sách Mapping
+            var users = await _userRepo.Query()
+                .Where(u => (u.UnitId == unitId || userIdsFromMapping.Contains(u.Id)) 
+                            && u.IsApproved 
+                            && !u.IsDeleted)
+                .Select(u => new UserDto
                 {
-                    Id = x.User!.Id,
-                    Username = x.User.Username,
-                    Role = x.User.Role
+                    Id = u.Id,
+                    Username = u.Username,
+                    FullName = u.FullName ?? "—",
+                    EmployeeCode = u.EmployeeCode ?? "—",
+                    Role = u.Role,
+                    UnitId = u.UnitId,
+                    IsApproved = u.IsApproved
                 })
                 .ToListAsync();
+
             return users;
         }
 
@@ -84,15 +94,17 @@ namespace WorkManagementSystem.Application.Services
             return _mapper.Map<UnitDto>(unit);
         }
 
+        // ✅ SỬA: Soft delete thay vì xóa cứng
         public async Task Delete(Guid id)
         {
             var unit = await _repo.GetByIdAsync(id)
                 ?? throw new Exception("Unit not found");
-            _repo.Delete(unit);
+
+            unit.IsDeleted = true;  // ✅ Soft delete
+            _repo.Update(unit);
             await _repo.SaveAsync();
         }
 
-        // ✅ Thêm thành viên vào đơn vị
         public async Task AddMember(Guid unitId, Guid userId)
         {
             var exists = await _userUnitRepo.Query()
@@ -108,7 +120,6 @@ namespace WorkManagementSystem.Application.Services
             await _userUnitRepo.SaveAsync();
         }
 
-        // ✅ Xóa thành viên khỏi đơn vị
         public async Task RemoveMember(Guid unitId, Guid userId)
         {
             var userUnit = await _userUnitRepo.Query()
