@@ -72,9 +72,8 @@ builder.Services.AddCors(options =>
     {
         policy.WithOrigins(
                 "http://localhost:5173",
-                "http://localhost:3000"
-            // thêm frontend deploy sau này vào đây, ví dụ:
-            // "https://your-frontend.onrender.com"
+                "http://localhost:3000",
+                "https://your-frontend.vercel.app"
             )
             .AllowAnyHeader()
             .AllowAnyMethod()
