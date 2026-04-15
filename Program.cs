@@ -177,6 +177,19 @@ app.MapGet("/", () => Results.Json(new
     time = DateTime.UtcNow
 }));
 
+app.MapGet("/db-check", async (AppDbContext db) =>
+{
+    try
+    {
+        var canConnect = await db.Database.CanConnectAsync();
+        return Results.Ok(new { connected = canConnect });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem(ex.ToString());
+    }
+});
+
 app.MapControllers();
 
 app.Run();
